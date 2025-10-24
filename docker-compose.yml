@@ -1,0 +1,174 @@
+version: '3.9'
+
+services:
+
+  frontend-service:
+    build: ./frontend1/Frontend/energy-system
+    container_name: frontend-service
+    networks:
+      - proxy-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.frontend.rule=Host(`localhost`)"
+      - "traefik.http.services.frontend.loadbalancer.server.port=5173"
+
+
+  auth-service:
+    build: ./backend/Authentication/auth
+    container_name: auth-service
+    restart: always
+    depends_on:
+      postgres-auth:
+        condition: service_healthy
+    environment:
+      DB_IP: postgres-auth
+      DB_PORT: 5433
+      DB_USER: postgres
+      DB_PASSWORD: roxanna
+      DB_DBNAME: credential_database
+    networks:
+      - proxy-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.auth.rule=Host(`localhost`) && PathPrefix(`/auth`)"
+      - "traefik.http.services.auth.loadbalancer.server.port=8082"
+
+
+  user-service:
+    build: ./backend/UserManagement/user-service
+    container_name: user-service
+    restart: always
+    depends_on:
+      postgres-user:
+        condition: service_healthy
+      device-service:
+        condition: service_started
+    environment:
+      DB_IP: postgres-user  
+      DB_PORT: 5433
+      DB_USER: postgres
+      DB_PASSWORD: roxanna
+      DB_DBNAME: user_database
+
+      DEVICE_SERVICE_URL: http://device-service:8081
+
+    networks:
+      - proxy-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.user.rule=Host(`localhost`) && PathPrefix(`/users`)"
+      - "traefik.http.services.user.loadbalancer.server.port=8083"
+
+
+  device-service:
+    build: ./backend/DeviceManagement/device-service
+    container_name: device-service
+    restart: always
+    depends_on:
+      postgres-device:
+        condition: service_healthy
+    environment:
+      DB_IP: postgres-device
+      DB_PORT: 5433
+      DB_USER: postgres
+      DB_PASSWORD: roxanna
+      DB_DBNAME: device_database
+    networks:
+      - proxy-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.device.rule=Host(`localhost`) && (PathPrefix(`/devices`) || PathPrefix(`/sync`))"
+      - "traefik.http.services.device.loadbalancer.server.port=8081"
+
+
+
+  postgres-auth:
+    image: postgres:15
+    container_name: postgres-auth
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: roxanna
+      POSTGRES_DB: credential_database
+    command: -p 5433
+    ports:
+      - "5434:5433"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -p 5433"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    volumes:
+      - postgres-auth-data:/var/lib/postgresql/data
+    networks:
+      - proxy-network
+
+
+  postgres-user:
+    image: postgres:15
+    container_name: postgres-user
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: roxanna
+      POSTGRES_DB: user_database
+    command: -p 5433
+    ports:
+      - "5435:5433"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -p 5433"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    volumes:
+      - postgres-user-data:/var/lib/postgresql/data
+    networks:
+      - proxy-network
+
+  postgres-device:
+    image: postgres:15
+    container_name: postgres-device
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: roxanna
+      POSTGRES_DB: device_database
+    command: -p 5433
+    ports:
+      - "5436:5433"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -p 5433"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    volumes:
+      - postgres-device-data:/var/lib/postgresql/data
+    networks:
+      - proxy-network
+
+
+  traefik:
+    image: traefik:v3.0
+    container_name: traefik
+    restart: always
+    ports:
+      - "80:80"
+      - "8080:8080"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - "./traefik.yml:/etc/traefik/traefik.yml:ro"
+      - "./dynamic:/etc/traefik/dynamic:ro"
+      - "./logs:/var/log/traefik"
+    networks:
+      - proxy-network
+
+
+networks:
+  proxy-network:
+    name: proxy-network
+    driver: bridge
+
+volumes:
+  postgres-auth-data:
+  postgres-user-data:
+  postgres-device-data:

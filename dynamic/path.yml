@@ -1,0 +1,71 @@
+http:
+  routers:
+    # === FRONTEND (React) ===
+    frontend:
+      rule: "Host(`localhost`) && PathPrefix(`/`)" # toate cererile fără prefix merg la frontend
+      entryPoints:
+        - web
+      service: frontend-service
+
+    # === AUTH SERVICE ===
+    auth:
+      rule: "Host(`localhost`) && PathPrefix(`/auth`)"
+      entryPoints:
+        - web
+      middlewares:
+        - strip-auth-prefix
+      service: auth-service
+
+    # === USER SERVICE ===
+    user:
+      rule: "Host(`localhost`) && PathPrefix(`/users`)"
+      entryPoints:
+        - web
+      service: user-service
+
+    # === DEVICE SERVICE ===
+    device:
+      rule: "Host(`localhost`) && (PathPrefix(`/devices`) || PathPrefix(`/sync`))"
+      entryPoints:
+        - web
+      middlewares:
+        - strip-device-prefix
+      service: device-service
+
+  middlewares:
+    strip-auth-prefix:
+      stripPrefix:
+        prefixes:
+          - "/auth"
+
+    strip-user-prefix:
+      stripPrefix:
+        prefixes:
+          - "/users"
+
+    strip-device-prefix:
+      stripPrefix:
+        prefixes:
+          - "/devices"
+          - "/sync"
+
+  services:
+    frontend-service:
+      loadBalancer:
+        servers:
+          - url: "http://frontend-service:5173"
+
+    auth-service:
+      loadBalancer:
+        servers:
+          - url: "http://auth-service:8082"
+
+    user-service:
+      loadBalancer:
+        servers:
+          - url: "http://user-service:8083"
+
+    device-service:
+      loadBalancer:
+        servers:
+          - url: "http://device-service:8081"
